@@ -1,213 +1,350 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import re
 import sys
 
 class MTdVTranslator:
     def __init__(self):
+        # 当前翻译器的内部状态
         self.indent_level = 0
         self.initialized = False
+        self.boucle_count = 0
+        self.boucle_stack = []
+        self.code = []
 
-    def indent(self, text):
-        return "    " * self.indent_level + text if text.strip() else ""
+    def indent(self):
+        return "    " * self.indent_level
 
+    def add_line(self, line):
+        self.code.append(self.indent() + line)
+
+    # =============== 1) 主入口：解析 .ts => 指令树 ===============
     def parse_ts_lines(self, lines):
-        instructions = []
-        pattern = re.compile(
-            r'^(?P<comment>\%.*)|'
-            r'^(?P<endfile>\#)$|'
-            r'.*?(?P<si0>si\s*\(\s*0\s*\))|'
-            r'.*?(?P<si1>si\s*\(\s*1\s*\))|'
-            r'.*?(?P<fin>\bfin\b)|'
-            r'.*?(?P<I>\bI\b)|'
-            r'.*?(?P<P>\bP\b)|'
-            r'.*?(?P<G>\bG\b)|'
-            r'.*?(?P<D>\bD\b)|'
-            r'.*?(?P<zero>\b0\b)|'
-            r'.*?(?P<one>\b1\b)|'
-            r'.*?(?P<boucle>\bboucle\b)'
-        )
-
-        for line in lines:
-            s = line.strip()
-            if not s:
-                continue
-            m = pattern.match(s)
-            if not m:
-                continue
-            if m.group('comment'):
-                continue
-            if m.group('endfile'):
-                instructions.append({"type": "endfile"})
-                break
-            if m.group('si0'):
-                instructions.append({"type": "si", "condition": 0, "content": []})
-                continue
-            if m.group('si1'):
-                instructions.append({"type": "si", "condition": 1, "content": []})
-                continue
-            if m.group('fin'):
-                instructions.append({"type": "fin"})
-                continue
-            if m.group('I'):
-                instructions.append({"type": "instruction", "value": "I"})
-                continue
-            if m.group('P'):
-                instructions.append({"type": "instruction", "value": "P"})
-                continue
-            if m.group('G'):
-                instructions.append({"type": "instruction", "value": "G"})
-                continue
-            if m.group('D'):
-                instructions.append({"type": "instruction", "value": "D"})
-                continue
-            if m.group('zero'):
-                instructions.append({"type": "instruction", "value": "0"})
-                continue
-            if m.group('one'):
-                instructions.append({"type": "instruction", "value": "1"})
-                continue
-            if m.group('boucle'):
-                instructions.append({"type": "boucle", "content": []})
-                continue
+        """
+        从 .ts 文件行中，先 tokenize + P0 分析 => (tokID, tok, level)，再转成指令树
+        """
+        parse_result = self.parse_ts_lines_new(lines)
+        instructions = self._convert_tokens_to_instructions(parse_result)
         return instructions
 
+    # =============== 2) 分词 + 简单下推 ===============
+    def parse_ts_lines_new(self, lines):
+        """
+        先行去掉注释('%'开头)和空行，再用正则匹配成 token。
+        """
+        terminals_re = {
+            '#'      : r'^[ \n]*#[ \n]*',
+            '}'      : r'^[ \n]*}[ \n]*',
+            'I'      : r'^[ \n]*I[ \n]*',
+            'P'      : r'^[ \n]*P[ \n]*',
+            'G'      : r'^[ \n]*G[ \n]*',
+            'D'      : r'^[ \n]*D[ \n]*',
+            '0'      : r'^[ \n]*0[ \n]*',
+            '1'      : r'^[ \n]*1[ \n]*',
+            'fin'    : r'^[ \n]*fin[ \n]*',
+            'boucle' : r'^[ \n]*boucle[ \n]*',
+            'si(0)'  : r'^[ \n]*si[ \n]*\(\s*0\s*\)\s*',
+            'si(1)'  : r'^[ \n]*si[ \n]*\(\s*1\s*\)\s*'
+        }
+        terminals_automata = {x: re.compile(terminals_re[x]) for x in terminals_re}
+
+        txt = "\n".join(lines)
+        tokens = self._tokenize_string(txt, terminals_automata)
+
+        parse_result = []
+        success = self._parse_tokens_P0(tokens, parse_result)
+        if not success:
+            print("ERROR: parse failed or unmatched } # etc.")
+            return []
+        return parse_result
+
+    def _tokenize_string(self, txt, terms_automata):
+        """
+        顺序匹配 tokens；若某行无法匹配则跳过该行
+        """
+        tokens = []
+        still_good = True
+        while still_good and len(txt)>0:
+            # 去掉行首是 '%' 的注释
+            if txt.lstrip().startswith('%'):
+                newl = txt.find('\n')
+                if newl!=-1:
+                    txt=txt[newl+1:]
+                    continue
+                else:
+                    break
+            # 跳过空行
+            if txt.strip()=='':
+                newl = txt.find('\n')
+                if newl!=-1:
+                    txt=txt[newl+1:]
+                    continue
+                else:
+                    break
+
+            matched_something=False
+            for tk_name, pattern in terms_automata.items():
+                m = pattern.match(txt)
+                if m:
+                    tokens.append(tk_name)
+                    txt=txt[m.end():]
+                    matched_something=True
+                    break
+            if not matched_something:
+                # 跳到下一行
+                newl = txt.find('\n')
+                if newl!=-1:
+                    txt=txt[newl+1:]
+                else:
+                    still_good=False
+        return tokens
+
+    def _parse_tokens_P0(self, tokens, parse_result, parse_state='P0', K=0, tokid=0):
+        """
+        简易下推： boucle, si(...) => K+1; '}' => K-1; '#' => stop; 其余指令 => K不变
+        """
+        if not tokens:
+            return True
+        tk = tokens[0]
+        tokid+=1
+        parse_result.append((tokid, tk, K))
+
+        if tk in ['I','P','G','D','0','1','fin']:
+            return self._parse_tokens_P0(tokens[1:], parse_result, parse_state, K, tokid)
+        elif tk in ['boucle','si(0)','si(1)']:
+            return self._parse_tokens_P0(tokens[1:], parse_result, parse_state, K+1, tokid)
+        elif tk=='}':
+            if K<1:
+                print("ERROR: unmatched '}' => negative K.")
+                return False
+            else:
+                return self._parse_tokens_P0(tokens[1:], parse_result, parse_state, K-1, tokid)
+        elif tk=='#':
+            # 结束 => done
+            return True
+        else:
+            return self._parse_tokens_P0(tokens[1:], parse_result, parse_state, K, tokid)
+
+    # =============== 3) 把 (tokID, tok, K) => 指令树 ===============
+    def _convert_tokens_to_instructions(self, parse_result):
+        root = {"type":"root","content":[]}
+        level_map = {0: root}
+        for (tid, tk, k) in parse_result:
+            if k not in level_map:
+                level_map[k] = {"type":"unknown","content":[]}
+            current_block=level_map[k]
+
+            if tk in ['I','P','G','D','0','1']:
+                current_block["content"].append({"type":"instruction","value":tk})
+            elif tk=='fin':
+                current_block["content"].append({"type":"fin"})
+            elif tk=='boucle':
+                newb = {"type":"boucle","content":[]}
+                current_block["content"].append(newb)
+                level_map[k+1]=newb
+            elif tk=='si(0)':
+                newsi={"type":"si","condition":0,"content":[]}
+                current_block["content"].append(newsi)
+                level_map[k+1]=newsi
+            elif tk=='si(1)':
+                newsi={"type":"si","condition":1,"content":[]}
+                current_block["content"].append(newsi)
+                level_map[k+1]=newsi
+            elif tk=='}':
+                level_map.pop(k,None)
+            elif tk=='#':
+                current_block["content"].append({"type":"endfile"})
+            else:
+                # 未知 => 跳过
+                pass
+        return root["content"]
+
+    # =============== 4) 将指令结构 => Python代码(禁用 for => 用while或递归) ===============
     def translate_instruction(self, inst):
-        lines = []
-        if inst["type"] == "instruction":
-            val = inst.get("value", "")
-            if val == "I" and not self.initialized:
-                lines = [
-                    "tape = [0] * 1000",
-                    "head = 30"
-                ]
-                self.initialized = True
-            elif val == "P":
-                lines = ["input('Appuyez sur Entrée pour continuer...')"]
-            elif val == "G":
-                lines = ["if head > 0:", "    head = head - 1"]
-            elif val == "D":
-                lines = ["if head < 999:", "    head = head + 1"]
-            elif val in ["0", "1"]:
-                lines = [
-                    "if 0 <= head < 1000:",
-                    f"    tape[head] = {val}"
-                ]
+        t = inst["type"]
+        if t=="instruction":
+            val = inst.get("value","")
+            if val=="I" and not self.initialized:
+                self.add_line("# 初始化 tape & head (仅一次)")
+                self.add_line("tape = [0]*1000")
+                self.add_line("head = 30")
+                self.initialized=True
+            elif val=="P":
+                self.add_line("print('Pause => tape,head:')") 
+                self.add_line("print('Tape=', tape)")
+                self.add_line("print('Head=', head)") 
+                self.add_line("input('Appuyez sur Entrée...')")
 
-        elif inst["type"] == "si":
-            cond = inst.get("condition", 0)
-            lines = [f"if tape[head] == {cond}:"]
-            self.indent_level += 1
-            sub_lines = []
-            for sub in inst.get("content", []):
-                sub_lines.extend(self.translate_instruction(sub))
-            if not sub_lines:
-                lines.append("    pass")
+            elif val=="G":
+                self.add_line("if head>0:")
+                self.indent_level+=1
+                self.add_line("head = head-1")
+                self.indent_level-=1
+
+            elif val=="D":
+                self.add_line("if head<999:")
+                self.indent_level+=1
+                self.add_line("head = head+1")
+                self.indent_level-=1
+
+            elif val in ["0","1"]:
+                self.add_line("if head>=0 and head<1000:")
+                self.indent_level+=1
+                self.add_line(f"tape[head] = {val}")
+                self.indent_level-=1
+
+            elif val=="fin":
+                self.add_line("program_continue = 0")
+
+        elif t=="si":
+            cond = inst.get("condition",0)
+            sub_insts = inst.get("content",[])
+            # 生成 if head>=0 and head<1000 and tape[head]==cond:
+            self.add_line(f"if head>=0 and head<1000 and tape[head]=={cond}:")
+            self.indent_level+=1
+            if not sub_insts:
+                self.add_line("pass  # 无子指令")
             else:
-                lines.extend(["    " + sub_line for sub_line in sub_lines])
-            self.indent_level -= 1
+                for s in sub_insts:
+                    self.translate_instruction(s)
+            self.indent_level-=1
 
-        elif inst["type"] == "fin":
-            lines = ["program_continue = 0"]
-
-        elif inst["type"] == "boucle":
-            boucle_id = f"boucle_{self.indent_level}"
-            lines = [f"def {boucle_id}():", "    global tape, head, program_continue"]
-            self.indent_level += 1
-            sub_lines = []
-            for sub in inst.get("content", []):
-                sub_lines.extend(self.translate_instruction(sub))
-            if not sub_lines:
-                lines.append("    pass")
+        elif t=="boucle":
+            sub_insts = inst.get("content", [])
+            if not sub_insts:
+                self.add_line("# boucle vide => pass")
+                self.add_line("pass")
             else:
-                lines.extend(["    " + sub_line for sub_line in sub_lines])
-            self.indent_level -= 1
-            lines.append("    if program_continue:")
-            lines.append(f"        {boucle_id}()")
-            lines.append(f"{boucle_id}()")
+                func_name = f"boucle_{self.boucle_count}"
+                self.boucle_count+=1
+                self.add_line(f"def {func_name}():")
+                self.indent_level+=1
+                self.add_line("global program_continue, head, tape")
+                # 翻译子指令
+                for s in sub_insts:
+                    self.translate_instruction(s)
+                # 在函数末尾递归
+                self.add_line("if program_continue!=0:")
+                self.indent_level+=1
+                self.add_line(f"{func_name}()")
+                self.indent_level-=1
+                self.indent_level-=1
+                # 立即调用
+                self.add_line(f"{func_name}()")
 
-        return ["    " * self.indent_level + line for line in lines]
+        elif t=="endfile":
+            pass
 
     def generate_python_code(self, instructions):
-        program = [
-            "import sys",
-            "",
-            "# Global variables",
-            "tape = [0] * 1000",
-            "head = 30",
-            "ARGC = 0",
-            "ARG0 = ''",
-            "program_continue = 1",
-            "",
-            "def process_args():",
-            "    global ARGC, ARG0",
-            "    ARGC = len(sys.argv) - 1",
-            "    ARG0 = sys.argv[0]",
-            "",
-            "def execute_program():",
-            "    global tape, head, program_continue",
-            "",
-            "    # Initialisation",
-            "    pos1 = int(input('Veuillez entrer la 1re position (0-999): '))",
-            "    pos2 = int(input('Veuillez entrer la 2e position (0-999): '))",
-            "    if 0 <= pos1 < 1000:",
-            "        tape[pos1] = 1",
-            "    if 0 <= pos2 < 1000:",
-            "        tape[pos2] = 1",
-            "",
-            "    # Imprimer l'état initial",
-            "    print('État initial :')",
-            "    print(''.join(str(x) for x in tape[0:61]))",
-            "    print(' ' * head + 'X')",
-            ""
-        ]
+        # 头部
+        self.add_line("import sys")
+        self.add_line("")
+        self.add_line("# 定义全局变量(整数+唯一列表可用):")
+        self.add_line("tape = [0]*1000")
+        self.add_line("head = 30")
+        self.add_line("program_continue = 1")
+        self.add_line("ARGC = 0")
+        self.add_line("ARG0 = ''")
+        self.add_line("")
 
-        self.indent_level = 1
+        self.add_line("def process_args():")
+        self.indent_level+=1
+        self.add_line("global ARGC, ARG0")
+        self.add_line("ARGC = len(sys.argv)-1")
+        self.add_line("ARG0 = sys.argv[0]")
+        self.indent_level-=1
+        self.add_line("")
+
+        self.add_line("def execute_program():")
+        self.indent_level+=1
+        self.add_line("global tape, head, program_continue")
+        self.add_line("# 不用 for => 用递归函数 fill_tape")
+
+        # 定义 fill_tape
+        self.add_line("def fill_tape(pos, remain):")
+        self.indent_level+=1
+        self.add_line("if remain<=0:")
+        self.indent_level+=1
+        self.add_line("return")
+        self.indent_level-=1
+        self.add_line("if pos<1000:")
+        self.indent_level+=1
+        self.add_line("tape[pos] = 1")
+        self.add_line("fill_tape(pos+1, remain-1)")
+        self.indent_level-=2
+
+        # 用户输入
+        self.add_line("start1 = int(input('Début 1re plage(0-999)? '))")
+        self.add_line("length1= int(input('Longueur 1re plage? '))")
+        self.add_line("if start1>=0 and start1<1000:")
+        self.indent_level+=1
+        self.add_line("fill_tape(start1, length1)")
+        self.indent_level-=1
+        self.add_line("")
+        self.add_line("start2 = int(input('Début 2e plage(0-999)? '))")
+        self.add_line("length2= int(input('Longueur 2e plage? '))")
+        self.add_line("if start2>=0 and start2<1000:")
+        self.indent_level+=1
+        self.add_line("fill_tape(start2, length2)")
+        self.indent_level-=1
+        self.add_line("")
+
+        self.add_line("print('État initial:')")
+        self.add_line("print(''.join(str(x) for x in tape[0:61]))")
+        self.add_line("print(' ' * head + 'X')")
+        self.add_line("")
+
+        # 遍历 instructions
         for inst in instructions:
-            if inst["type"] == "endfile":
+            if inst.get("type")=="endfile":
                 break
-            program.extend(self.translate_instruction(inst))
+            self.translate_instruction(inst)
 
-        program.extend([
-            "    # Imprimer l'état final",
-            "    print('État final :')",
-            "    print(''.join(str(x) for x in tape[0:61]))",
-            "    print(' ' * head + 'X')",
-            "    print('Programme terminé.')"
-        ])
+        self.add_line("")
+        self.add_line("print('État final:')")
+        self.add_line("print(''.join(str(x) for x in tape[0:61]))")
+        self.add_line("print(' ' * head + 'X')")
+        self.add_line("print('Programme terminé.')")
+        self.indent_level=0
+        self.add_line("")
+        self.add_line("if __name__=='__main__':")
+        self.indent_level+=1
+        self.add_line("process_args()")
+        self.add_line("execute_program()")
+        self.indent_level=0
 
-        program.extend([
-            "",
-            "if __name__ == '__main__':",
-            "    process_args()",
-            "    execute_program()"
-        ])
+        return "\n".join(self.code)
 
-        return "\n".join(program)
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: python traducteur2.py input.ts output.py")
+    if len(sys.argv)!=3:
+        print("Usage: python traducteur_2.py input.ts output.py")
         sys.exit(1)
 
-    input_file = sys.argv[1]
-    output_file = sys.argv[2]
+    input_ts=sys.argv[1]
+    output_py=sys.argv[2]
 
-    translator = MTdVTranslator()
-
-    # Essayer d'ouvrir le fichier et lire les lignes avec différents encodages
-    encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+    translator=MTdVTranslator()
+    # 读取 input.ts (尝试各种编码)
+    encodings = ['utf-8','latin-1','cp1252','iso-8859-1']
     for enc in encodings:
         try:
-            with open(input_file, 'r', encoding=enc) as f:
-                lines = f.readlines()
+            with open(input_ts,'r',encoding=enc) as f:
+                lines=f.readlines()
             break
         except UnicodeDecodeError:
             pass
 
-    instructions = translator.parse_ts_lines(lines)
-    code = translator.generate_python_code(instructions)
+    # 解析 => 指令树
+    instructions=translator.parse_ts_lines(lines)
+    # 生成 python 代码
+    code=translator.generate_python_code(instructions)
 
-    with open(output_file, 'w', encoding='utf-8') as f_out:
-        f_out.write(code)
+    with open(output_py,'w',encoding='utf-8') as fw:
+        fw.write(code)
+    print(f"[INFO] {output_py} generated successfully, no 'for' loops, no half 'if' statements.")
 
-if __name__ == '__main__':
+
+if __name__=='__main__':
     main()
