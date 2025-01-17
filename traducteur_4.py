@@ -10,7 +10,7 @@ class MTdVTranslator:
 
     def parse_ts_lines(self, lines):
         """
-        解析 .ts -> 返回指令树 instructions
+        analyse .ts -> retourne un arbre d'instructions
         """
         tokens = self._tokenize(lines)
         instructions = self._build_ast(tokens)
@@ -18,7 +18,7 @@ class MTdVTranslator:
 
     def _tokenize(self, lines):
         """
-        简易分词：去注释/空行，拆开 '}', ...
+        tokénisation simple: suppression des lignes vides, séparations '{}' etc.
         """
         res = []
         for line in lines:
@@ -33,7 +33,7 @@ class MTdVTranslator:
 
     def _build_ast(self, tokens):
         """
-        构建指令树，支持 { boucles, si(0), si(1), } 等
+        construction de l'arbre d'instructions,supporte { boucles, si(0), si(1), } etc.
         """
         root = {"type":"root","content":[]}
         level_map = {0: root}
@@ -42,7 +42,7 @@ class MTdVTranslator:
         while i<len(tokens):
             tk = tokens[i]
             if tk == '}':
-                # 结束一个块
+                # fin de bloc
                 if cur_level>0:
                     level_map.pop(cur_level)
                     cur_level-=1
@@ -80,7 +80,7 @@ class MTdVTranslator:
                 })
                 i+=1
                 continue
-            # 未知 => 忽略
+            # incoonu => ignorer
             i+=1
         return root["content"]
 
@@ -90,10 +90,10 @@ class MTdVTranslator:
         """
         lines = []
 
-        # 1) 定义若干只有一个参数的纯函数
-        #    例如 state = [tape, head, instructions]
-        #    访问 state[0], state[1], state[2] 来取各要素
-        #    不能写 newTape = ... => 只能 inline
+        # 1) Définir plusieurs fonctions pures avec un seul paramètre
+        #    Par exemple state = [tape, head, instructions]
+        #    Accéder à state[0], state[1], state[2] pour obtenir les éléments
+        #    Ne pas utiliser newTape = ... => uniquement en ligne
         lines.append("def empty_tape(n):")
         lines.append("    if n<=0:")
         lines.append("        return []")
@@ -187,7 +187,7 @@ class MTdVTranslator:
         lines.append("                return state")
         lines.append("")
 
-        # 指令执行： 只接受一个参数 state => 返回新 state
+        # Exécution des instructions : n'accepte qu'un paramètre state => retourne un nouvel état
         lines.append("def step_instruction(state):")
         lines.append("    # 取 instructions[0] =>执行 => 返回新state+去掉instructions[0]")
         lines.append("    instrs = get_instructions(state)")
