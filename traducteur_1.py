@@ -464,7 +464,7 @@ def main():
     
     input_file = sys.argv[1]
     output_file = sys.argv[2]
-
+    
     translator = MTdVTranslator()
     
     # lire le fichier d'entrée (avec plusieurs encodages)
