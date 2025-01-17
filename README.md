@@ -84,3 +84,16 @@ python3 traducteur_4.py <input_file.TS> <output_file.py>
 ```
 python3 <output_file.py>
 ```
+
+| MTdV     | Python                                                     | Effet                                                    |
+| -------- | ---------------------------------------------------------- | -------------------------------------------------------- |
+| `I`      | `print_tape(state)`                                        | Affiche l’état actuel du ruban et la position de la tête |
+| `P`      | `input('Appuyez sur Entrée pour continuer...')`            | Fait une pause dans l’exécution                          |
+| `G`      | `move_left(state)`                                         | Déplace la tête à gauche.                                |
+| `D`      | `move_right(state)`                                        | Déplace la tête à droite.                                |
+| `0`      | `write_zero(state)`                                        | Écrire un `0` à la position actuelle                     |
+| `1`      | `write_one(state)`                                         | Écrire un `1` à la position actuelle                     |
+| `si(0)`  | `if tape[head] == 0:`                                      | Vérifier si la condition est remplie (tête sur 0)        |
+| `si(1)`  | `if tape[head] == 1:`                                      | Vérifier si la condition est remplie (tête sur 1)        |
+| `boucle` | `run_instructions([state[0], state[1], sub])`  (récursive) | Répéter un bloc d'instructions                           |
+| `#`      | `return (tape, head, [])`                                  | Arrêt de l'exécution                                     |
