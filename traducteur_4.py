@@ -86,7 +86,8 @@ class MTdVTranslator:
 
     def generate_pure_function_code(self, instructions):
         """
-        生成 只有单参函数 + 无赋值/无循环/无局部变量 + 纯函数式 Python
+        Générer du Python fonctionnel pur avec uniquement des fonctions à un seul paramètre, 
+        sans affectation, sans boucle et sans variables locales.
         """
         lines = []
 
@@ -102,7 +103,7 @@ class MTdVTranslator:
         lines.append("")
 
         lines.append("def write_one(state):")
-        lines.append("    # state=[tape, head, instructions], 这里只改 tape[head]=>1")
+        lines.append("    # state=[tape, head, instructions], seulement modifier tape[head]=>1")
         lines.append("    if len(state)<2:")
         lines.append("        return state")
         lines.append("    else:")
@@ -189,7 +190,7 @@ class MTdVTranslator:
 
         # Exécution des instructions : n'accepte qu'un paramètre state => retourne un nouvel état
         lines.append("def step_instruction(state):")
-        lines.append("    # 取 instructions[0] =>执行 => 返回新state+去掉instructions[0]")
+        lines.append("    # Prendre instructions[0] => exécuter => retourner le nouvel état + enlever instructions[0]")
         lines.append("    instrs = get_instructions(state)")
         lines.append("    if len(instrs)==0:")
         lines.append("        return state")
@@ -211,7 +212,7 @@ class MTdVTranslator:
         lines.append("                            return set_instructions(write_one(state), rest)")
         lines.append("                        else:")
         lines.append("                            if val=='I':")
-        lines.append("                                # print tape")
+        lines.append("                                # afficher le ruban")
         lines.append("                                return set_instructions(print_tape(state), rest)")
         lines.append("                            else:")
         lines.append("                                if val=='P':")
@@ -220,10 +221,10 @@ class MTdVTranslator:
         lines.append("                                    return set_instructions(state, rest)")
         lines.append("                                else:")
         lines.append("                                    if val=='fin':")
-        lines.append("                                        # fin => ignore rest")
+        lines.append("                                        # fin => ignorer le reste")
         lines.append("                                        return [ state[0], state[1], [] ]")
         lines.append("                                    else:")
-        lines.append("                                        # inconnue => skip")
+        lines.append("                                        # inconnue => ignorer")
         lines.append("                                        return set_instructions(state, rest)")
         lines.append("        else:")
         lines.append("            if first['type']=='si':")
@@ -231,50 +232,50 @@ class MTdVTranslator:
         lines.append("                tap = state[0]")
         lines.append("                hd  = state[1]")
         lines.append("                if hd>=0 and hd<len(tap) and tap[hd]==cond:")
-        lines.append("                    # 执行sub_insts => 纯函数 => 递归")
+        lines.append("                    # Exécuter sub_insts => fonction pure => récursive")
         lines.append("                    sub = first['content']")
         lines.append("                    newState = run_instructions([tap,hd,sub])")
         lines.append("                    return set_instructions(newState, rest)")
         lines.append("                else:")
-        lines.append("                    # skip sub")
+        lines.append("                    # ignorer sub")
         lines.append("                    return set_instructions(state, rest)")
         lines.append("            else:")
         lines.append("                if first['type']=='boucle':")
-        lines.append("                    # 只能执行一次 => 或递归 => 这里先一次")
+        lines.append("                    # Peut être exécutée une seule fois => ou récursive => ici une fois seulement")
         lines.append("                    sub = first['content']")
         lines.append("                    newState = run_instructions([ state[0], state[1], sub])")
         lines.append("                    return set_instructions(newState, rest)")
         lines.append("                else:")
         lines.append("                    if first['type']=='fin':")
-        lines.append("                        # fin => ignore remainder")
+        lines.append("                        # fin => ignorer le reste")
         lines.append("                        return [ state[0], state[1], [] ]")
         lines.append("                    else:")
-        lines.append("                        # skip")
+        lines.append("                        # ignorer")
         lines.append("                        return set_instructions(state, rest)")
         lines.append("")
 
         lines.append("def run_instructions(state):")
-        lines.append("    # 递归地执行指令列表,直到空或fin")
+        lines.append("    # Exécuter les instructions de manière récursive jusqu'à ce qu'il n'y ait plus rien ou qu'on rencontre 'fin'")
         lines.append("    instrs = get_instructions(state)")
         lines.append("    if len(instrs)==0:")
         lines.append("        return state")
         lines.append("    else:")
         lines.append("        newState = step_instruction(state)")
-        lines.append("        # tail recursion => run_instructions(newState)")
+        lines.append("        # Récursion terminale => run_instructions(newState)")
         lines.append("        return run_instructions(newState)")
         lines.append("")
 
-        # 生成 instructions 的 python list => all in a single param
+        # Générer les instructions en tant que liste Python => tout dans un seul paramètre
         instructions_code = self._serialize_instructions(instructions)
 
         lines.append("def main(oneArg):")
         lines.append("    # oneArg => [ARGC, ARG0, ARG1, ...]?")
-        lines.append("    # 不能写 any assignment => 只能 if else => return")
+        lines.append("    # Impossible d'utiliser des assignments => uniquement if else => return")
         lines.append("    if len(oneArg)<=2:")
-        lines.append("        # 不传指令 => do nothing")
+        lines.append("        # Pas d'instruction fournie => ne rien faire")
         lines.append("        return []")
         lines.append("    else:")
-        lines.append(f"        # 构造 state=[tape,head,instructions], tape=empty_tape(1000), head=30")
+        lines.append(f"        # Construire state=[tape,head,instructions], tape=empty_tape(1000), head=30")
         lines.append(f"        st0 = [ empty_tape(1000), 30, {instructions_code} ]")
         lines.append(f"        stFinal = run_instructions(st0)")
         lines.append(f"        print('Programme terminé.')")
@@ -289,7 +290,7 @@ class MTdVTranslator:
 
     def _serialize_instructions(self, instructions):
         """
-        把指令树转成 python list string, 例如:
+        Convertir l'arbre des instructions en une liste Python, par exemple :
         [{'type':'instruction','value':'D'}, {'type':'si','condition':0,'content':[...]}]
         """
         def conv(inst):
@@ -321,7 +322,7 @@ def main():
     input_ts = sys.argv[1]
     output_py = sys.argv[2]
 
-    # 读取输入文件（尝试多种编码）
+    # Lire le fichier d'entrée (essayer plusieurs encodages)
     encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
     for enc in encodings:
         try:
@@ -340,7 +341,7 @@ def main():
     with open(output_py,'w',encoding='utf-8') as fw:
         fw.write(final_code)
 
-    print(f"[INFO] Generated {output_py} . Functions have only ONE param (state or oneArg).")
+    print(f"[INFO] Génération de {output_py} terminée. Les fonctions ont seulement UN paramètre (state ou oneArg).")
 
 
 if __name__=='__main__':
