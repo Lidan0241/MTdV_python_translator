@@ -2,6 +2,7 @@
 Ce projet est réalisé dans le cadre du cours de Calculabilité en Master 2. L'objectif principal est de développer un traducteur en Python pour les programmes écrits dans le langage MTdV, tout en respectant des contraintes spécifiques pour différentes questions.
 
 ## Utilisation des scripts
+- Seul le script `traducteur_1.py` est fonctionnel, les autres (`traducteur_2.py`, `traducteur_3.py` et `traducteur_4.py`) n'ont pas pu être exécutés avec succès.
 
 ### Question 1 :
 - Pour exécuter le traducteur :

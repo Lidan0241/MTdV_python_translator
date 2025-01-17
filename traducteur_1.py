@@ -21,7 +21,6 @@ class MTdVTranslator:
         else:
             self.code.append(self.indent() + line)
 
-    # =============== 1)  Nouvelle fonction principale du parseur (interface externe) ===============
     def parse_ts_lines(self, lines):
         """
         À partir des lignes d'un fichier .ts, effectue une analyse avec tokenize + P0 pour obtenir une liste de (tokID, tok, level).
@@ -34,7 +33,6 @@ class MTdVTranslator:
         instructions = self._convert_tokens_to_instructions(parse_result)
         return instructions
 
-    # =============== 2) Analyse lexicale + petite machine à états pour la syntaxe ===============
     def parse_ts_lines_new(self, lines):
         """
         使用新的解析器逻辑来对 .ts 文件的行进行解析，
@@ -161,7 +159,7 @@ class MTdVTranslator:
             print(f'ERROR: unexpected token "{tok}" (K={K})')
             return False
 
-    # =============== 3) Convertit (tokID, tok, level) en "structure d'instructions" ===============
+
     def _convert_tokens_to_instructions(self, parse_result):
         """
         Convertit une série de (tokID, tok, K) de parse_result en une structure comme :
@@ -231,7 +229,6 @@ class MTdVTranslator:
         return root["content"]
 
 
-    # =============== 4) convertir les instructions en code python ===============
     def translate_instruction(self, inst):
         if inst["type"] == "instruction":
             val = inst.get("value", "")
