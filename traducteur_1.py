@@ -21,26 +21,26 @@ class MTdVTranslator:
         else:
             self.code.append(self.indent() + line)
 
-    # =============== 1) 新的 parseur 主函数（对外接口） ===============
+    # =============== 1)  Nouvelle fonction principale du parseur (interface externe) ===============
     def parse_ts_lines(self, lines):
         """
-        从 .ts 文件行中，先用 tokenize + P0 分析得到 (tokID, tok, level) 列表；
-        再将其转换为生成代码所需的指令结构列表 (list of dict)。
+        À partir des lignes d'un fichier .ts, effectue une analyse avec tokenize + P0 pour obtenir une liste de (tokID, tok, level).
+        Ensuite, convertit cette liste en une structure d'instructions requise pour la génération de code.
         """
-        # 1) 用新版解析器获取 (tokID, tok, level) 列表
-        parse_result = self.parse_ts_lines_new(lines)  # 下方方法
+        # 1) Utilise le nouveau parseur pour obtenir la liste (tokID, tok, level)
+        parse_result = self.parse_ts_lines_new(lines)
 
-        # 2) 将 parse_result 转成指令树/列表
+        # 2) Convertit parse_result en une liste/arborescence d'instructions
         instructions = self._convert_tokens_to_instructions(parse_result)
         return instructions
 
-    # =============== 2) 词法分析 + 简单语法状态机 ===============
+    # =============== 2) Analyse lexicale + petite machine à états pour la syntaxe ===============
     def parse_ts_lines_new(self, lines):
         """
         使用新的解析器逻辑来对 .ts 文件的行进行解析，
         返回 [(tokID, tok, level), ...] 形式的解析结果。
         """
-        # 1) 先准备词法分析所需的正则
+        # 1) Prépare les expressions régulières nécessaires pour l'analyse lexicale
         terminals_re = {
             '#'      : r'^[ \n]*#[ \n]*',
             '}'      : r'^[ \n]*}[ \n]*',
@@ -59,11 +59,11 @@ class MTdVTranslator:
             x: re.compile(terminals_re[x]) for x in terminals_re.keys()
         }
 
-        # 2) 把 lines 拼成一个大字符串，用以词法分析
+        # 2) Assemble les lignes en une grande chaîne pour l'analyse lexicale
         txt = "\n".join(lines)
         tokens = self._tokenize_string(txt, terminals_automata)
 
-        # 3) 用小型状态机 P0 对 tokens 进行简单语法解析 (获取 (tokID, tok, K))
+        # 3) Utilise une petite machine à états P0 pour une analyse syntaxique simple (obtenir (tokID, tok, K))
         parse_result = []
         success = self._parse_tokens_P0(tokens, parse_result)
         if not success:
@@ -74,26 +74,26 @@ class MTdVTranslator:
 
     def _tokenize_string(self, txt, terms_automata):
         """
-        根据若干正则，把大文本 txt 分割成 token 列表。
-        如果遇到无法识别的文本，就报错退出或抛异常。
+        Divise le texte txt en une liste de tokens en utilisant plusieurs expressions régulières.
+        Si un texte non reconnu est rencontré, signale une erreur ou lève une exception.。
         """
         txt_sz = len(txt)
         tokens = []
         match = True
 
         while match and (len(txt) != 0):
-            # 先跳过注释行
+            # Saute les lignes de commentaires
             if txt.lstrip().startswith('%'):
-                # 找到下一个换行符的位置
+                # Trouve la position du prochain saut de ligne
                 next_newline = txt.find('\n')
                 if next_newline != -1:
                     txt = txt[next_newline + 1:]
                     continue
                 else:
-                    # 如果没有找到换行符，说明已经到文件末尾
+                    # Si aucun saut de ligne n'est trouvé, c'est la fin du fichier
                     break
             
-            # 跳过空行
+            # sauter lignes vides
             if txt.strip() == '':
                 next_newline = txt.find('\n')
                 if next_newline != -1:
@@ -111,8 +111,6 @@ class MTdVTranslator:
                         txt = txt[e:]
                         break
             else:
-                # 如果 for 循环没有 break，说明没有任何 token 能匹配
-                # 但我们应该跳过这一行并继续
                 next_newline = txt.find('\n')
                 if next_newline != -1:
                     txt = txt[next_newline + 1:]
@@ -128,15 +126,15 @@ class MTdVTranslator:
 
     def _parse_tokens_P0(self, tokens, parse_result, parse_state='P0', K=0, tokid=0):
         """
-        简单的递归下降 / 下推自动机：
-          - '#' 且 K==0 => 结束
-          - '}' => K减1
-          - 'boucle','si(0)','si(1)' => K加1
-          - 其余指令 => K不变
-        parse_result 里会记录 (tokID, tok, K)
+        Descente récursive simple / automate à pile :
+          - '#' et K==0 => fin
+          - '}' => K diminue de 1
+          - 'boucle','si(0)','si(1)' => K augmente de 1
+          - autres instructions => K reste inchangé
+        parse_result enregistre (tokID, tok, K)
         """
         if not tokens:
-            # 如果没有更多 token，一般认为错误结束；除非之前遇到 '#'
+            # Si aucun token restant, on considère une fin erronée, sauf si '#' a été rencontré
             return False
 
         tok = tokens[0]
@@ -144,16 +142,16 @@ class MTdVTranslator:
         parse_result.append((tokid, tok, K))
 
         if tok == '#' and K == 0:
-            # 在顶层读到 '#' 就算成功结束
+            # Rencontrer '#' au niveau supérieur indique une fin réussie
             return True
         elif tok in ['I','P','G','D','0','1','fin']:
-            # 普通指令 => K不变
+            # Instructions normales => K reste inchangé
             return self._parse_tokens_P0(tokens[1:], parse_result, parse_state, K, tokid)
         elif tok in ['boucle','si(0)','si(1)']:
-            # 打开一个块 => K加1
+            # Ouvre un bloc => K augmente de 1
             return self._parse_tokens_P0(tokens[1:], parse_result, parse_state, K+1, tokid)
         elif tok == '}':
-            # 闭合一个块 => K减1
+            # Ferme un bloc => K diminue de 1
             if K < 1:
                 print('ERROR: unbalanced "}" encountered.')
                 return False
@@ -163,11 +161,10 @@ class MTdVTranslator:
             print(f'ERROR: unexpected token "{tok}" (K={K})')
             return False
 
-    # =============== 3) 将 (tokID, tok, level) 转换为“指令结构” ===============
+    # =============== 3) Convertit (tokID, tok, level) en "structure d'instructions" ===============
     def _convert_tokens_to_instructions(self, parse_result):
         """
-        把 parse_result 中的一连串 (tokID, tok, K) 转换成
-        形如:
+        Convertit une série de (tokID, tok, K) de parse_result en une structure comme :
           [
             {"type":"boucle", "content":[]},
             {"type":"si","condition":0,"content":[]},
@@ -176,30 +173,29 @@ class MTdVTranslator:
             {"type":"endfile"},
             ...
           ]
-        等可被 generate_python_code() 使用的数据结构。
-        
-        此处示例：使用 `K` 来管理嵌套块。
-        实现思路：
-          - 维护一个根节点 root = {"type":"root","content":[]}
-          - 维护一个 {level -> 当前所在 block} 的映射
-          - 当遇到 "boucle" / "si(0)" / "si(1)" 就创建新 block，附加到当前 block 的 content，并更新 level_map[level+1]
-          - 当遇到 "}" 就从 level_map 里弹出
-          - 当遇到 '#' => endfile
-          - 当遇到普通指令 => 附加到当前 block
+        Ce format est utilisable par generate_python_code().
+
+        Idée d'implémentation :
+          - Maintenir un nœud racine root = {"type":"root","content":[]}
+          - Maintenir une correspondance {level -> bloc courant}
+          - Lors de la rencontre de "boucle" / "si(0)" / "si(1)", créer un nouveau bloc, l'ajouter au contenu du bloc courant, et mettre à jour level_map[level+1]
+          - Lors de la rencontre de "}", retirer de level_map
+          - Lors de la rencontre de '#', ajouter endfile
+          - Pour une instruction normale, l'ajouter au bloc courant
         """
         root = {"type": "root", "content": []}
-        level_map = {0: root}   # 用 level_map[k] 来代表“第 k 层所在的当前块”
+        level_map = {0: root}   # Utiliser level_map[k] pour représenter "le bloc courant au niveau k"
         
         for (tokid, tok, k) in parse_result:
-            # 若某次出现 k 不在 level_map 里，就先给它一个“空块”，
-            # 以免后面找 current_block 出错
+            # Si k n'est pas encore dans level_map, créer un "bloc vide"
+            # Sinon, les blocs sautés causeraient des erreurs
             if k not in level_map:
-                # 注意：实际需要更多判断，否则如果解析中跳级就乱了
+                # Attention : nécessiterait plus de vérifications en cas de sauts de niveau
                 level_map[k] = {"type": "unknown", "content": []}
 
             current_block = level_map[k]
 
-            # 判断 token
+            # Analyse du token
             if tok == '#':
                 current_block["content"].append({"type": "endfile"})
             elif tok in ['I','P','G','D','0','1']:
@@ -212,7 +208,7 @@ class MTdVTranslator:
             elif tok == 'boucle':
                 new_block = {"type": "boucle", "content": []}
                 current_block["content"].append(new_block)
-                # 下一层 (k+1) 的块就是 new_block
+                # Le bloc suivant (k+1) devient new_block
                 level_map[k+1] = new_block
             elif tok == 'si(0)':
                 new_block = {"type": "si", "condition": 0, "content": []}
@@ -223,19 +219,19 @@ class MTdVTranslator:
                 current_block["content"].append(new_block)
                 level_map[k+1] = new_block
             elif tok == '}':
-                # 闭合当前块 => 从 level_map 中移除
-                # 这样后续指令会回到父块
+                # Ferme le bloc courant => Retirer de level_map
+                # Ainsi, les instructions suivantes retournent au bloc parent
                 level_map.pop(k, None)
             else:
-                # 未知 token, 这里不应出现，因为在 parse_ts_lines_new 已处理
+                # Token inconnu, ne devrait pas arriver car géré dans parse_ts_lines_new
                 pass
 
-        # 最终，所有指令都挂在 root["content"]，可有嵌套
-        # 如果只想要顶层，就返回 root["content"]
+        # Finalement, toutes les instructions sont dans root["content"], avec des blocs imbriqués
+        # Si seules les instructions de niveau supérieur sont nécessaires, retourner root["content"]
         return root["content"]
 
 
-    # =============== 4) 将指令结构转成可执行 Python 代码 ===============
+    # =============== 4) convertir les instructions en code python ===============
     def translate_instruction(self, inst):
         if inst["type"] == "instruction":
             val = inst.get("value", "")
@@ -274,13 +270,13 @@ class MTdVTranslator:
             self.indent_level -= 1
 
         elif inst["type"] == "fin":
-            # 当遇到 'fin'，插入这行以让循环退出
+            # lors de "fin", insérer cette ligne
             self.add_line("program_continue = 0")
 
         elif inst["type"] == "boucle":
             sub_insts = inst.get("content", [])
             if not sub_insts:
-                # 如果没有子指令，就别写循环了，直接 pass
+                # si aucune sous-instruction, ne pas créer de boulce et écrire pas
                 self.add_line("# boucle vide")
                 self.add_line("pass")
             else:
@@ -291,7 +287,7 @@ class MTdVTranslator:
                 self.indent_level -= 1
 
         elif inst["type"] == "endfile":
-            # 如果想在这里结束翻译，可自行处理
+            # si nécessaire, traiter la fin de fichier ici
             pass
 
 
@@ -300,7 +296,7 @@ class MTdVTranslator:
         self.step_counter = 0
         self.indent_level = 0
         
-        # 头部：声明全局变量
+        # entête: déclaration des variables globales
         self.add_line("import sys")
         self.add_line("")
         self.add_line("# Global variables")
@@ -312,7 +308,7 @@ class MTdVTranslator:
         self.add_line("STEP = 0  # 用于模拟程序执行步骤")
         self.add_line("")
 
-        # 定义 process_args
+        # déf process_args
         self.add_line("def process_args():")
         self.indent_level += 1
         self.add_line("global ARGC, ARG0")
@@ -322,15 +318,15 @@ class MTdVTranslator:
         self.indent_level -= 1
         self.add_line("")
 
-        # 定义 execute_program
+        # déf execute_program
         self.add_line("def execute_program():")
         self.indent_level += 1
         self.add_line("global tape, head, program_continue, STEP")
         self.add_line("")
 
-        # -- 这里是初始化输入 (两次输入) --
+        # -- initialisation des entrées (2 entrées) --
         self.add_line("# Initialisation", self.indent_level)
-        # 第一次输入
+        # 1ère entrée
         self.add_line("start1 = int(input('Veuillez entrer la position de début de la 1re plage (0-999): '))", self.indent_level)
         self.add_line("length1 = int(input('Veuillez entrer la longueur de la 1re plage: '))", self.indent_level)
         self.add_line("if 0 <= start1 < 1000:", self.indent_level)
@@ -338,7 +334,7 @@ class MTdVTranslator:
         self.add_line("        if start1 + i < 1000:", self.indent_level)
         self.add_line("            tape[start1 + i] = 1", self.indent_level)
 
-        # 第二次输入
+        # 2ème entrée
         self.add_line("", self.indent_level)
         self.add_line("start2 = int(input('Veuillez entrer la position de début de la 2e plage (0-999): '))", self.indent_level)
         self.add_line("length2 = int(input('Veuillez entrer la longueur de la 2e plage: '))", self.indent_level)
@@ -347,17 +343,17 @@ class MTdVTranslator:
         self.add_line("        if start2 + i < 1000:", self.indent_level)
         self.add_line("            tape[start2 + i] = 1", self.indent_level)
 
-        # 打印初始状态
+        # print l'état initial
         self.add_line("", self.indent_level)
         self.add_line("print('État initial :')", self.indent_level)
         self.add_line("print(''.join(str(x) for x in tape[0:61]))", self.indent_level)
         self.add_line("print(' ' * head + 'X')", self.indent_level)
         self.add_line("", self.indent_level)
 
-        # -- 这里展开指令，无循环/无递归 --
+        # -- instructions, sans boucle ni récursivité --
         self.translate_instructions_no_loop(instructions, self.indent_level)
 
-        # -- 打印最终状态 --
+        # -- print l'état final --
         self.add_line("", self.indent_level)
         self.add_line("# Imprimer l'état final", self.indent_level)
         self.add_line("print('État final :')", self.indent_level)
@@ -366,7 +362,7 @@ class MTdVTranslator:
         self.add_line("print('Programme terminé.')", self.indent_level)
         self.add_line("", self.indent_level)
 
-        # 收尾
+        # fin
         self.indent_level -= 1
         self.add_line("")
         self.add_line("if __name__ == '__main__':")
@@ -374,45 +370,45 @@ class MTdVTranslator:
         self.add_line("process_args()")
         self.add_line("execute_program()")
 
-        # 返回最终合并的字符串
+        # retourner le code final sous forme de chaîne
         return "\n".join(self.code)
 
     def translate_instructions_no_loop(self, instructions, indent_level):
         """
-        依次读取 instructions，每条指令在“STEP == X”分支下执行，然后 STEP= X+1。
+        Lire séquentiellement les instructions, chaque instruction est exécutée dans une branche "STEP == X", puis STEP = X+1.
         
-        如果遇到“boucle”或“si(...)”等需要多次执行的地方：
-          - 只能做“有限展开”，把循环体展开 N 次
-            或者在这里发出警告/报错说“无循环不可实现无界 boucle”。
+        Si une "boucle" ou un "si(...)" nécessitant plusieurs exécutions est rencontré :
+          - Faire un "déroulement limité", dérouler N fois la boucle
+            ou émettre un avertissement/erreur disant que "les boucles infinies ne peuvent pas être réalisées sans boucle".
         """
         for inst in instructions:
             self.add_line(f"# Translating {inst}", indent_level)
 
-            # 先记录当前指令所在 stepID
+            # noter le stepID actuel de l'instruction
             current_step = self.step_counter
             self.step_counter += 1
             next_step = self.step_counter  # 下一个 step
 
-            # 生成 if STEP == current_step: ...
+            # générer if STEP == current_step: ...
             self.add_line(f"if STEP == {current_step}:", indent_level)
             self.add_line("    # 指令开始", indent_level)
-            # 在这里翻译具体指令逻辑
+            # traduire ici la logique spécifique de l'instruction
             self.translate_single_instruction(inst, indent_level+1)
-            # 指令结束后，把 STEP 设置为 next_step（相当于“继续”）
+            # après l'instruction, définir STEP au next_step (= "continuer")
             self.add_line(f"STEP = {next_step}", indent_level+1)
             self.add_line("", indent_level)
 
     def translate_single_instruction(self, inst, level):
         """
-        用 if/else/print/赋值等方式翻译单条指令。
-        不产生循环/递归。
+        Traduire une instruction individuelle en utilisant if/else/print/assignation, etc.
+        Ne pas générer de boucle/ni de récursivité.
         """
         t = inst.get("type", "")
         if t == "instruction":
             val = inst.get("value","")
             if val == "I":
                 self.add_line("# init tape/head (example)", level)
-                # 这里是否重复做初始化，看你需求
+                # Décider si l'initialisation doit être répétée selon besoins
             elif val == "P":
                 self.add_line("input('Appuyez sur Entrée pour continuer...')", level)
             elif val == "G":
@@ -430,8 +426,8 @@ class MTdVTranslator:
 
         elif t == "si":
             cond = inst.get("condition", 0)
-            # 用 if/else
-            # sub_insts 只有在 cond 成立时才执行
+            # Utiliser if/else
+            # sub_insts est exécuté uniquement si cond est vrai
             sub_insts = inst.get("content", [])
             self.add_line(f"if tape[head] == {cond}:", level)
             if sub_insts:
@@ -441,21 +437,21 @@ class MTdVTranslator:
                 self.add_line("    pass", level)
 
         elif t == "fin":
-            # 对于 fin => 结束执行
+            # pour fin -> arrêter l'exécution
             self.add_line("program_continue = 0", level)
             self.add_line("# 你也可以选择这里就把 STEP 设置为一个大值，以防继续执行", level)
 
         elif t == "boucle":
             sub_insts = inst.get("content", [])
-            # 原本你会用 while program_continue: ...
-            # 但现在不能用循环 => 只能有限展开或报错
-            # 例如只展开一次 + 警告
+            # Normalement, on utilisera while program_continue: ...
+            # Mais ici, pas de boucle => dérouler ou émettre un avertissement
+            # Par exemple, dérouler une fois + avertissement
             self.add_line("# [WARNING] boucle => 无循环模式只能执行一次", level)
             for s in sub_insts:
                 self.translate_single_instruction(s, level)
 
         elif t == "endfile":
-            # 无操作
+            # pas d'opération
             self.add_line("# endfile => do nothing", level)
         else:
             self.add_line(f"# Unrecognized instruction: {t}", level)
@@ -471,7 +467,7 @@ def main():
 
     translator = MTdVTranslator()
     
-    # 读取输入文件（尝试多种编码）
+    # lire le fichier d'entrée (avec plusieurs encodages)
     encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
     for enc in encodings:
         try:
@@ -481,12 +477,12 @@ def main():
         except UnicodeDecodeError:
             pass
 
-    # 调用新版 parser
+    # appeler le nouveau parser
     instructions = translator.parse_ts_lines(lines)
-    # 生成 Python 代码
+    # générer code python
     code = translator.generate_python_code(instructions)
     
-    # 写入输出文件
+    # écrire dans le fichier de sortie
     with open(output_file, 'w', encoding='utf-8') as f_out:
         f_out.write(code)
 
