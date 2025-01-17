@@ -48,4 +48,39 @@ python3 <output_file.py>
 | `si(0)`  | `if tape[head] == 0:`                                 | Exécute des instructions si la condition sur le ruban est remplie. |
 | `si(1)`  | `if tape[head] == 1:`                                 | Exécute des instructions si la condition sur le ruban est remplie. |
 | `boucle` | Fonction récursive                                    | Implémente une boucle via des appels récursifs.              |
-| `#`      | `program_continue = 0`                                | Arrêt de programme                                           |
+| `#`      | `program_continue = 0`                                | Arrêt de programme
+
+
+### Question 3 :
+- Pour exécuter le traducteur :
+```
+python3 traducteur_3.py <input_file.TS> <output_file.py>
+```
+- Pour exécuter le fichier Python généré :
+```
+python3 <output_file.py>
+```
+
+| MTdV     | Python                                            | Effet                                                        |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------ |
+| `I`      | `tape = [0] * 1000` `head = 30`                   | Initialise un ruban de longueur 1000 et la tête à la position 30. |
+| `P`      | `print`suivi de `input('Appuyez sur Entrée...')   | Affiche l’état actuel et attend une entrée utilisateur.      |
+| `G`      | `move_left(head)`                                 | Déplace la tête à gauche.                                    |
+| `D`      | `move_right(head)`                                | Déplace la tête à droite.                                    |
+| `0`      | `write_zero(tape, head)`                          | Écrire un `0` à la position actuelle                         |
+| `1`      | `write_one(tape, head)`                           | Écrire un `1` à la position actuelle                         |
+| `si(0)`  | `if tape[head] == 0:`                             | Vérifier si la condition est remplie (tête sur 0)            |
+| `si(1)`  | `if tape[head] == 1:`                             | Vérifier si la condition est remplie (tête sur 1)            |
+| `boucle` | Fonction récursive gérant le contenu de la boucle | Répéter les instructions dans la boucle                      |
+| `#`      | `return (tape, head)`                             | Arrêt de programme, fin des instructions
+
+
+### Question 4 :
+- Pour exécuter le traducteur :
+```
+python3 traducteur_4.py <input_file.TS> <output_file.py>
+```
+- Pour exécuter le fichier Python généré :
+```
+python3 <output_file.py>
+```
