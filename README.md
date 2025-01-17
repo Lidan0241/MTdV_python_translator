@@ -4,11 +4,11 @@ Ce projet est réalisé dans le cadre du cours de Calculabilité en Master 2. L'
 ## Utilisation des scripts
 
 ### Question 1 :
-
+- Pour exécuter le traducteur :
 ```
 python3 traducteur_1.py <input_file.TS> <output_file.py>
 ```
-
+- Pour exécuter le fichier Python généré :
 ```
 python3 <output_file.py>
 ```
@@ -27,3 +27,25 @@ python3 <output_file.py>
 | boucle |                          pas réussi                          |                                                              |
 |   \#   |                    "program_continue = 0"                    |                     arrêter le programme                     |
 
+
+### Question 2 :
+- Pour exécuter le traducteur :
+```
+python3 traducteur_2.py <input_file.TS> <output_file.py>
+```
+- Pour exécuter le fichier Python généré :
+```
+python3 <output_file.py>
+```
+
+| MTdV     | Python                                                | Effet                                                        |
+| -------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| `I`      | `tape = [0] * 1000` `head = 30`                       | Initialise un ruban de longueur 1000 et la tête à la position 30. |
+| `P`      | `print`suivi de `input('Appuyez sur Entrée...')       | Affiche l’état actuel et attend une entrée utilisateur.      |
+| `G`      | `if head > 0:` ` head = head - 1                      | Déplace la tête à gauche.                                    |
+| `D`      | `if head < 999:` ` head = head + 1`                   | Déplace la tête à droite.                                    |
+| `0`,`1`  | `if head >= 0 and head < 1000:` ` tape[head] = <val>` | Modifie la valeur sur le ruban à la position actuelle.       |
+| `si(0)`  | `if tape[head] == 0:`                                 | Exécute des instructions si la condition sur le ruban est remplie. |
+| `si(1)`  | `if tape[head] == 1:`                                 | Exécute des instructions si la condition sur le ruban est remplie. |
+| `boucle` | Fonction récursive                                    | Implémente une boucle via des appels récursifs.              |
+| `#`      | `program_continue = 0`                                | Arrêt de programme                                           |
